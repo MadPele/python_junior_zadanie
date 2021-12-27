@@ -9,6 +9,7 @@ app = Flask(__name__)
 
 
 def create_users():
+    # create table USERS in our database
     con = sqlite3.connect("projectDB.db")
     print("Database connected successfully")
     con.execute('''CREATE TABLE USERS
@@ -19,6 +20,7 @@ def create_users():
 
 
 def create_tasks():
+    # create table TASKS in our database
     con = sqlite3.connect("projectDB.db")
     con.execute('''CREATE TABLE TASKS
          (ID INT PRIMARY KEY     NOT NULL,
@@ -30,6 +32,7 @@ def create_tasks():
 
 
 def insert_users():
+    # insert users to our database
     con = sqlite3.connect("projectDB.db")
     users = requests.get("https://jsonplaceholder.typicode.com/users")
     for x in users.json():
@@ -43,6 +46,7 @@ def insert_users():
 
 
 def insert_tasks():
+    # insert tasks to our database
     con = sqlite3.connect("projectDB.db")
     users = requests.get("https://jsonplaceholder.typicode.com/todos")
     for x in users.json():
@@ -56,73 +60,78 @@ def insert_tasks():
     con.close()
 
 
-@app.route('/')
-def hello_world():
-    return 'Hello World!'
+def configure_routes(app):
 
+    @app.route('/')
+    # basic route - just show Hello World to user
+    def hello_world():
+        return 'Hello World!'
 
-@app.route('/app/all')
-def task_list():
-    with open('task_list', mode='w') as csv_file:
-        fieldnames = ['name', 'city', 'title', 'completed']
-        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+    @app.route('/app/all')
+    # take all needed information about task and write it in csv file on user hard drive
+    def task_list():
+        with open('task_list', mode='w') as csv_file:
+            fieldnames = ['name', 'city', 'title', 'completed']
+            writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
 
-        writer.writeheader()
+            writer.writeheader()
 
+            con = sqlite3.connect("projectDB.db")
+
+            name = ""
+            city = ""
+            check_id = ""
+
+            task = con.execute(f"SELECT TITLE,COMPLETED,USERID from TASKS")
+            for row in task:
+                task = row[0]
+                completed = row[1]
+                user_id = row[2]
+                if user_id != check_id:
+                    check_id = user_id
+                    user = con.execute(f"SELECT NAME,CITY from USERS WHERE ID={user_id}")
+                    user_data = user.fetchall()
+                    name = user_data[0][0]
+                    city = user_data[0][1]
+
+                writer.writerow({'name': name, 'city': city, 'title': task, 'completed': completed})
+
+        return 'Saved'
+
+    @app.route('/app/printall')
+    # print csv file(needed create it first!) with tasks in terminal
+    def print_all():
+        try:
+            data = pandas.read_csv('task_list')
+            print(data)
+            return 'Read'
+        except FileNotFoundError:
+            return 'You need to download file first'
+
+    @app.route('/app/<task_id>')
+    # show user information about specific task in web browser
+    def user_task(task_id):
         con = sqlite3.connect("projectDB.db")
+        task = con.execute(f"SELECT TITLE,COMPLETED,USERID from TASKS WHERE ID={task_id}")
+        task_data = task.fetchall()
+        title = task_data[0][0]
+        completed = task_data[0][1]
+        user_id = task_data[0][2]
 
-        name = ""
-        city = ""
-        check_id = ""
+        user = con.execute(f"SELECT NAME,CITY from USERS WHERE ID={user_id}")
+        user_data = user.fetchall()
+        name = user_data[0][0]
+        city = user_data[0][1]
 
-        task = con.execute(f"SELECT TITLE,COMPLETED,USERID from TASKS")
-        for row in task:
-            task = row[0]
-            completed = row[1]
-            user_id = row[2]
-            if user_id != check_id:
-                check_id = user_id
-                user = con.execute(f"SELECT NAME,CITY from USERS WHERE ID={user_id}")
-                user_data = user.fetchall()
-                name = user_data[0][0]
-                city = user_data[0][1]
+        con.close()
 
-            writer.writerow({'name': name, 'city': city, 'title': task, 'completed': completed})
+        answer = f"<b>Name</b> = {name} <b>City</b> = {city} <b>Task</b> = {title} <b>Completed</b> = {completed}"
 
-    return 'saved'
+        return answer
 
 
-@app.route('/app/printall')
-def print_all():
-    try:
-        data = pandas.read_csv('task_list')
-        print(data)
-        return 'read'
-    except FileNotFoundError:
-        return 'you need to download file first'
-
-
-@app.route('/app/<taskid>')
-def user_task(taskid):
-    con = sqlite3.connect("projectDB.db")
-    task = con.execute(f"SELECT TITLE,COMPLETED,USERID from TASKS WHERE ID={taskid}")
-    task_data = task.fetchall()
-    title = task_data[0][0]
-    completed = task_data[0][1]
-    user_id = task_data[0][2]
-
-    user = con.execute(f"SELECT NAME,CITY from USERS WHERE ID={user_id}")
-    user_data = user.fetchall()
-    name = user_data[0][0]
-    city = user_data[0][1]
-
-    con.close()
-
-    answer = f"<b>Name</b> = {name} <b>City</b> = {city} <b>Task</b> = {title} <b>Completed</b> = {completed}"
-
-    return answer
-
-
+configure_routes(app)
 if __name__ == '__main__':
+    # start our app
 
     app.run(host='localhost', port=8080, debug=True)
